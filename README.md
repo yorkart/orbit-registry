@@ -3,8 +3,10 @@
 Orbit uses this independent registry alongside the official Agent Client Protocol registry.
 
 The stable index is [registry.json](https://raw.githubusercontent.com/yorkart/orbit-registry/registry-v1/registry.json).
-GitHub Actions validates manifests on pull requests and publishes the generated index
-and icons together to the `registry-v1` branch after a successful build on `main`.
+GitHub Actions validates manifests and downloads every stable binary target.
+It checks the archive checksum when provided and verifies that the archive
+contains the declared executable. On `main`, a successful build publishes the
+generated index and icons together to the `registry-v1` branch.
 
 Each extension has its own `<id>/agent.json` and `<id>/icon.svg`. Use the ACP
 registry format and keep the directory name equal to the agent's fixed ID.
@@ -13,6 +15,8 @@ Run the same validation and build locally with:
 ```sh
 uv run --no-project --with 'jsonschema[format-nongpl]==4.26.0' scripts/build_registry.py
 ```
+
+Use `--offline` for a local schema-only build without access to vendor downloads.
 
 The initial TRAE CLI 0.216.0 manifest and icon come from
 [ACP registry PR #793](https://github.com/agentclientprotocol/registry/pull/793/files)
