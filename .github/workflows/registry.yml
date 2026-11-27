@@ -1,0 +1,71 @@
+name: ACP extension registry
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d
+      - name: Validate manifests and build registry
+        run: uv run --no-project --with 'jsonschema[format-nongpl]==4.26.0' scripts/build_registry.py
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        if: github.ref == 'refs/heads/main'
+        with:
+          name: registry
+          path: dist/
+          if-no-files-found: error
+
+  publish:
+    if: github.ref == 'refs/heads/main'
+    needs: validate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: registry-v1-publish
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: registry
+          path: ${{ runner.temp }}/registry
+      - name: Publish validated registry
+        shell: bash
+        run: |
+          main=$(git ls-remote --exit-code origin refs/heads/main)
+          if [[ "${main%%$'\t'*}" != "$GITHUB_SHA" ]]; then
+            exit 0
+          fi
+          if git ls-remote --exit-code origin refs/heads/registry-v1 >/dev/null; then
+            git fetch origin refs/heads/registry-v1
+            git switch --detach FETCH_HEAD
+            git rm -r .
+          else
+            status=$?
+            if [[ "$status" != 2 ]]; then
+              exit "$status"
+            fi
+            git switch --orphan registry-v1
+          fi
+
+          cp -R "$RUNNER_TEMP/registry/." .
+          git add registry.json icons
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git -c user.name='github-actions[bot]' \
+              -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+              commit -m "Publish registry from $GITHUB_SHA"
+          git push origin HEAD:refs/heads/registry-v1
