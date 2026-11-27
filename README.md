@@ -19,9 +19,6 @@ uv run --no-project --with 'jsonschema[format-nongpl]==4.26.0' scripts/build_reg
 
 Use `--offline` for a local schema-only build without access to vendor downloads.
 
-The initial TRAE CLI 0.216.0 manifest and icon come from
-[ACP registry PR #793](https://github.com/agentclientprotocol/registry/pull/793/files)
-at commit `65dc8fb918a6db003c26600226432bba1b7885e5`.
 The two schemas come from the
 [official ACP registry](https://github.com/agentclientprotocol/registry/tree/761c5a48b9862f6ff7e537a28154818c78033a36)
 and retain its Apache 2.0 license. Vendor distributions remain subject to their
