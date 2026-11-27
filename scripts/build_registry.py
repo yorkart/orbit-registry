@@ -50,7 +50,11 @@ def build(output, offline=False):
         if not offline:
             for platform, target in agent["distribution"].get("binary", {}).items():
                 try:
-                    check_archive(target)
+                    size = check_archive(target)
+                    print(
+                        f"Verified {agent_id} {platform} archive ({size:,} bytes)",
+                        flush=True,
+                    )
                 except (
                     OSError,
                     ValueError,

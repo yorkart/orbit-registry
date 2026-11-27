@@ -5,7 +5,8 @@ Orbit uses this independent registry alongside the official Agent Client Protoco
 The stable index is [registry.json](https://raw.githubusercontent.com/yorkart/orbit-registry/registry-v1/registry.json).
 GitHub Actions validates manifests and downloads every stable binary target.
 It checks the archive checksum when provided and verifies that the archive
-contains the declared executable. On `main`, a successful build publishes the
+contains the declared executable. The 1 GiB archive limit matches the Host
+installer. On `main`, a successful build publishes the
 generated index and icons together to the `registry-v1` branch.
 
 Each extension has its own `<id>/agent.json` and `<id>/icon.svg`. Use the ACP

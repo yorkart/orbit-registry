@@ -71,6 +71,16 @@ class ArchiveChecks(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "does not contain executable"):
                 check_archive({**target, "cmd": "./bin/missing"})
 
+    def test_stops_at_the_archive_size_limit(self):
+        target = {
+            "archive": "https://example.com/adapter.tar.gz",
+            "cmd": "./bin/traecli",
+        }
+        with patch("check_archives.MAX_BYTES", 2):
+            with patch.object(OPENER, "open", return_value=io.BytesIO(tar_bytes())):
+                with self.assertRaisesRegex(ValueError, "archive exceeds"):
+                    check_archive(target)
+
     def test_rejects_download_targets_on_private_networks(self):
         with (
             patch(

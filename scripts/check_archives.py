@@ -11,7 +11,8 @@ from pathlib import PurePosixPath
 from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
-MAX_BYTES = 256 * 1024 * 1024
+# Keep this in sync with the Host binary installer.
+MAX_BYTES = 1024 * 1024 * 1024
 
 
 def check_public_url(url):
@@ -79,7 +80,7 @@ def check_archive(target):
         while chunk := response.read(1024 * 1024):
             size += len(chunk)
             if size > MAX_BYTES:
-                raise ValueError("archive exceeds Orbit's 256 MiB limit")
+                raise ValueError("archive exceeds Orbit's 1 GiB limit")
             archive.write(chunk)
             digest.update(chunk)
 
@@ -88,5 +89,8 @@ def check_archive(target):
             raise ValueError("archive SHA-256 does not match the manifest")
 
         archive.seek(0)
-        if not archive_contains(archive, urlsplit(url).path.endswith(".zip"), command):
+        if not archive_contains(
+            archive, url.split("?", 1)[0].endswith(".zip"), command
+        ):
             raise ValueError(f"archive does not contain executable {target['cmd']}")
+        return size
