@@ -1,0 +1,209 @@
+name: Build Registry
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "*/agent.json"
+      - "*/icon.svg"
+      - ".github/workflows/**"
+      - "*.schema.json"
+      - "quarantine.json"
+  pull_request:
+    branches: [main]
+    paths:
+      - "*/agent.json"
+      - "*/icon.svg"
+      - ".github/workflows/**"
+      - "*.schema.json"
+      - "quarantine.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lint-and-test:
+    name: Lint & Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d
+
+      - name: Ruff check
+        working-directory: .github/workflows
+        run: uv run --with ruff ruff check .
+
+      - name: Ruff format check
+        working-directory: .github/workflows
+        run: uv run --with ruff ruff format --check .
+
+      - name: Run tests
+        working-directory: .github/workflows
+        run: uv run --with pytest --with 'jsonschema[format-nongpl]==4.26.0' pytest tests/ -v
+
+  build:
+    name: Build & Validate
+    timeout-minutes: 25
+    needs: lint-and-test
+    runs-on: ubuntu-latest
+    outputs:
+      agent_ids: ${{ steps.list-agents.outputs.ids }}
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d
+
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: "lts/*"
+          check-latest: true
+
+      - name: Validate and build
+        run: uv run --with 'jsonschema[format-nongpl]==4.26.0' .github/workflows/build_registry.py --verify-archives
+
+      - name: List agents for auth matrix
+        id: list-agents
+        run: |
+          IDS=$(python3 .github/workflows/verify_agents.py --list-ids)
+          echo "ids=$IDS" >> "$GITHUB_OUTPUT"
+
+      - name: List dist
+        run: ls -la dist/
+
+      - name: Upload artifacts
+        if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: registry
+          path: dist/
+          if-no-files-found: error
+
+  verify-auth:
+    name: Auth (${{ matrix.agent_id }})
+    needs: build
+    if: needs.build.outputs.agent_ids != '[]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        agent_id: ${{ fromJson(needs.build.outputs.agent_ids) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d
+
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: "lts/*"
+          check-latest: true
+
+      - name: Verify auth
+        env:
+          AGENT_ID: ${{ matrix.agent_id }}
+        run: python3 .github/workflows/verify_agents.py --auth-check --agent "$AGENT_ID"
+
+  release:
+    name: Publish GitHub Release and stable index
+    needs: [build, verify-auth]
+    if: >-
+      always() && needs.build.result == 'success' &&
+      (needs.verify-auth.result == 'success' || needs.verify-auth.result == 'skipped') &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+      github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: registry-v1-publish
+      queue: max
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Check registry inputs are current
+        id: current
+        shell: bash
+        run: |
+          git fetch origin refs/heads/main
+          if git diff --quiet "$GITHUB_SHA" FETCH_HEAD -- \
+            '*/agent.json' '*/icon.svg' '.github/workflows/**' '*.schema.json' quarantine.json; then
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download artifacts
+        if: steps.current.outputs.publish == 'true'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: registry
+          path: ${{ runner.temp }}/registry
+
+      - name: Publish stable index
+        if: steps.current.outputs.publish == 'true'
+        shell: bash
+        run: |
+          if git ls-remote --exit-code origin refs/heads/registry-v1 >/dev/null; then
+            git fetch origin refs/heads/registry-v1
+            git switch --detach FETCH_HEAD
+            git rm -r .
+          else
+            status=$?
+            if [[ "$status" != 2 ]]; then
+              exit "$status"
+            fi
+            git switch --orphan registry-v1
+          fi
+
+          mkdir -p icons
+          cp "$RUNNER_TEMP/registry/"*.json .
+          cp "$RUNNER_TEMP/registry/"*.svg icons/
+          git add -- .
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git -c user.name='github-actions[bot]' \
+              -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+              commit -m "Publish registry from $GITHUB_SHA"
+          git push origin HEAD:refs/heads/registry-v1
+
+      - name: Publish release
+        if: steps.current.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          VERSION="v$(TZ=UTC git show -s --format=%cd --date=format-local:%Y.%m.%d "$GITHUB_SHA")-$(git rev-parse --short=7 "$GITHUB_SHA")"
+          ASSETS=("$RUNNER_TEMP/registry/"*.json "$RUNNER_TEMP/registry/"*.svg)
+          if DRAFT=$(gh release view "$VERSION" --json isDraft --jq '.isDraft' 2>/dev/null); then
+            if [[ "$DRAFT" == "true" ]]; then
+              gh release upload "$VERSION" --clobber "${ASSETS[@]}"
+              gh release edit "$VERSION" --draft=false --latest
+            fi
+            exit 0
+          fi
+
+          PREV_TAG=$(gh release list --exclude-drafts --limit 1 --json tagName --jq '.[0].tagName // ""')
+          if [[ -n "$PREV_TAG" ]] && git merge-base --is-ancestor "$PREV_TAG" "$GITHUB_SHA"; then
+            git log "$PREV_TAG..$GITHUB_SHA" --pretty=format:'- %s' --no-merges > "$RUNNER_TEMP/release-notes"
+          else
+            printf 'Initial release\n' > "$RUNNER_TEMP/release-notes"
+          fi
+          gh release create "$VERSION" --target "$GITHUB_SHA" --latest \
+            --title "Registry $VERSION" --notes-file "$RUNNER_TEMP/release-notes" "${ASSETS[@]}"

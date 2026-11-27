@@ -53,33 +53,33 @@ class ArchiveChecks(unittest.TestCase):
 
     def test_rejects_missing_download(self):
         url = "https://example.com/adapter.tar.gz"
-        with patch.object(
-            OPENER, "open", side_effect=HTTPError(url, 404, "Not Found", None, None)
+        with (
+            patch.object(OPENER, "open", side_effect=HTTPError(url, 404, "Not Found", None, None)),
+            self.assertRaisesRegex(HTTPError, "404"),
         ):
-            with self.assertRaisesRegex(HTTPError, "404"):
-                check_archive({"archive": url, "cmd": "./bin/traecli"})
+            check_archive({"archive": url, "cmd": "./bin/traecli"})
 
     def test_rejects_wrong_digest_or_missing_executable(self):
-        target = {
-            "archive": "https://example.com/adapter.tar.gz",
-            "cmd": "./bin/traecli",
-        }
-        with patch.object(OPENER, "open", return_value=io.BytesIO(tar_bytes())):
-            with self.assertRaisesRegex(ValueError, "SHA-256"):
-                check_archive({**target, "sha256": "0" * 64})
-        with patch.object(OPENER, "open", return_value=io.BytesIO(tar_bytes())):
-            with self.assertRaisesRegex(ValueError, "does not contain executable"):
-                check_archive({**target, "cmd": "./bin/missing"})
+        target = {"archive": "https://example.com/adapter.tar.gz", "cmd": "./bin/traecli"}
+        with (
+            patch.object(OPENER, "open", return_value=io.BytesIO(tar_bytes())),
+            self.assertRaisesRegex(ValueError, "SHA-256"),
+        ):
+            check_archive({**target, "sha256": "0" * 64})
+        with (
+            patch.object(OPENER, "open", return_value=io.BytesIO(tar_bytes())),
+            self.assertRaisesRegex(ValueError, "does not contain executable"),
+        ):
+            check_archive({**target, "cmd": "./bin/missing"})
 
     def test_stops_at_the_archive_size_limit(self):
-        target = {
-            "archive": "https://example.com/adapter.tar.gz",
-            "cmd": "./bin/traecli",
-        }
-        with patch("check_archives.MAX_BYTES", 2):
-            with patch.object(OPENER, "open", return_value=io.BytesIO(tar_bytes())):
-                with self.assertRaisesRegex(ValueError, "archive exceeds"):
-                    check_archive(target)
+        target = {"archive": "https://example.com/adapter.tar.gz", "cmd": "./bin/traecli"}
+        with (
+            patch("check_archives.MAX_BYTES", 2),
+            patch.object(OPENER, "open", return_value=io.BytesIO(tar_bytes())),
+            self.assertRaisesRegex(ValueError, "archive exceeds"),
+        ):
+            check_archive(target)
 
     def test_rejects_download_targets_on_private_networks(self):
         with (
@@ -88,12 +88,12 @@ class ArchiveChecks(unittest.TestCase):
                 return_value=[(None, None, None, "", ("127.0.0.1", 443))],
             ),
             patch.object(OPENER, "open") as download,
+            self.assertRaisesRegex(ValueError, "public addresses"),
         ):
-            with self.assertRaisesRegex(ValueError, "public addresses"):
-                check_archive(
-                    {
-                        "archive": "https://example.com/adapter.tar.gz",
-                        "cmd": "./bin/traecli",
-                    }
-                )
+            check_archive(
+                {
+                    "archive": "https://example.com/adapter.tar.gz",
+                    "cmd": "./bin/traecli",
+                }
+            )
         download.assert_not_called()

@@ -17,15 +17,9 @@ MAX_BYTES = 1024 * 1024 * 1024
 
 def check_public_url(url):
     address = urlsplit(url)
-    if (
-        address.scheme != "https"
-        or not address.hostname
-        or address.username is not None
-    ):
+    if address.scheme != "https" or not address.hostname or address.username is not None:
         raise ValueError("archive URL must be public HTTPS")
-    hosts = socket.getaddrinfo(
-        address.hostname, address.port or 443, type=socket.SOCK_STREAM
-    )
+    hosts = socket.getaddrinfo(address.hostname, address.port or 443, type=socket.SOCK_STREAM)
     for *_, host in hosts:
         ip = ipaddress.ip_address(host[0])
         if not ip.is_global or ip.is_multicast:
@@ -51,9 +45,7 @@ def archive_contains(archive, is_zip, command):
                 for entry in entries.infolist()
             )
     with tarfile.open(fileobj=archive, mode="r|gz") as entries:
-        return any(
-            entry.isfile() and PurePosixPath(entry.name) == command for entry in entries
-        )
+        return any(entry.isfile() and PurePosixPath(entry.name) == command for entry in entries)
 
 
 def check_archive(target):
@@ -89,8 +81,6 @@ def check_archive(target):
             raise ValueError("archive SHA-256 does not match the manifest")
 
         archive.seek(0)
-        if not archive_contains(
-            archive, url.split("?", 1)[0].endswith(".zip"), command
-        ):
+        if not archive_contains(archive, url.split("?", 1)[0].endswith(".zip"), command):
             raise ValueError(f"archive does not contain executable {target['cmd']}")
         return size
