@@ -2,6 +2,26 @@
   "version": "1.0.0",
   "agents": [
     {
+      "id": "deepseek-harness",
+      "name": "DeepSeek Harness",
+      "version": "0.2.1",
+      "description": "DeepSeek Harness coding agent, served over the Agent Client Protocol.",
+      "repository": "https://github.com/deepseek-ai/deepseek-harness",
+      "website": "https://deepseek.com",
+      "authors": [
+        "DeepSeek"
+      ],
+      "license": "MIT",
+      "distribution": {
+        "npx": {
+          "package": "dsh-acp-agent@0.2.1",
+          "args": []
+        }
+      },
+      "license_url": "https://github.com/deepseek-ai/deepseek-harness/blob/master/LICENSE",
+      "icon": "https://raw.githubusercontent.com/yorkart/orbit-registry/registry-v1/icons/deepseek-harness.svg"
+    },
+    {
       "id": "traecli",
       "name": "TRAE CLI",
       "version": "0.216.0",
